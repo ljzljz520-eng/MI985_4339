@@ -23,7 +23,11 @@ func (s *Service) ImportBatch(ctx context.Context, batchID string, items []domai
 	_ = wf
 	isolated := make([]domain.ImportedRecord, len(items))
 	copy(isolated, items)
-	accepted, issues, validateErr := s.Validator.Validate(context.Background(), isolated)
+	// The batch context must propagate into validation so a cancellation raised
+	// after the workflow starts is honored mid-batch. Passing context.Background()
+	// here would make validation uncancellable: a cancelled batch would be reported
+	// as accepted and its records persisted, leaking the wrong state into later imports.
+	accepted, issues, validateErr := s.Validator.Validate(ctx, isolated)
 	result := domain.ImportResult{BatchID: batchID, Accepted: accepted}
 	for _, issue := range issues {
 		result.Rejected = append(result.Rejected, issue.ExternalID+":"+issue.Field)
